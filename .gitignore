@@ -1,0 +1,63 @@
+
+# =========================
+# Dataset files
+# =========================
+home-credit-default-risk/
+
+# =========================
+# Jupyter Notebook
+# =========================
+.ipynb_checkpoints/
+01_eda.ipynb
+
+# =========================
+# Python cache
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# =========================
+# Virtual environments
+# =========================
+venv/
+.venv/
+env/
+ENV/
+
+# =========================
+# IDE files
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Model artifacts
+# =========================
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.hdf5
+*.onnx
+
+# =========================
+# Logs and temporary files
+# =========================
+*.log
+tmp/
+temp/
+
+# =========================
+# Generated outputs
+# =========================
+outputs/
+figures/
+plots/
+submissions/
