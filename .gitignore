@@ -58,6 +58,7 @@ temp/
 # Generated outputs
 # =========================
 outputs/
+output/
 figures/
 plots/
 submissions/

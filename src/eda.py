@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -224,6 +223,7 @@ sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", square=False)
 plt.title("Correlation Heatmap - Selected Features")
 save_fig("correlation_heatmap_selected_features.png")
 
+# 8) BASIC FINDINGS
 print("\n8) BASIC FINDINGS")
 findings = []
 findings.append(f"Dataset contains {df.shape[0]:,} rows and {df.shape[1]:,} columns.")
@@ -246,5 +246,73 @@ with open(OUTPUT_DIR / "eda_findings.txt", "w", encoding="utf-8") as f:
         line = f"{i}. {item}"
         print(line)
         f.write(line + "\n")
+
+# 9) MISSING VALUE DEEP DIVE (from notebook Cell 8)
+print("\n9) MISSING VALUE DEEP DIVE")
+print("--- Understanding Missing Data ---")
+
+if "FLAG_OWN_CAR" in df.columns and "OWN_CAR_AGE" in df.columns:
+    car_no_car = df[df["FLAG_OWN_CAR"] == "N"]["OWN_CAR_AGE"].isna().all()
+    print(
+        f"Is OWN_CAR_AGE always missing when the client does not own a car? {car_no_car}"
+    )
+else:
+    print(
+        "Columns FLAG_OWN_CAR or OWN_CAR_AGE not found; skipping structural car-age check."
+    )
+
+ext_cols = [
+    col for col in ["EXT_SOURCE_1", "EXT_SOURCE_2", "EXT_SOURCE_3"] if col in df.columns
+]
+if ext_cols:
+    ext_missing_pct = (df[ext_cols].isnull().sum() / len(df) * 100).round(2)
+    ext_missing_pct.to_csv(
+        OUTPUT_DIR / "ext_source_missing_pct.csv", header=["missing_pct"]
+    )
+    print("\nMissing value percentage in EXT_SOURCE features:")
+    print((ext_missing_pct.astype(str) + "%").to_string())
+else:
+    print("No EXT_SOURCE columns found; skipping EXT_SOURCE missingness analysis.")
+
+# 10) CATEGORICAL FEATURES VS DEFAULT RATE (from notebook Cell 9)
+print("\n10) CATEGORICAL FEATURES VS DEFAULT RATE")
+print("\n--- Default Rate by Category (compact version) ---")
+
+
+def plot_default_rate(col: str) -> None:
+    if col not in df.columns:
+        print(f"Column {col} not found; skipping.")
+        return
+
+    summary = (
+        df.groupby(col, dropna=False)[TARGET_COL]
+        .agg(["count", "mean"])
+        .reset_index()
+        .rename(columns={"mean": "default_rate"})
+    )
+    summary["default_rate"] = summary["default_rate"] * 100
+
+    summary = summary[summary["count"] > 100].sort_values(
+        "default_rate", ascending=False
+    )
+
+    summary.to_csv(OUTPUT_DIR / f"default_rate_compact_{col.lower()}.csv", index=False)
+
+    plt.figure(figsize=(10, 5))
+    sns.barplot(data=summary, x="default_rate", y=col, palette="Reds_r")
+    plt.title(f"Default Rate (%) by {col}")
+    plt.xlabel("Default Rate (%)")
+    plt.ylabel(col)
+    save_fig(f"default_rate_compact_{col.lower()}.png")
+
+
+categorical_cols_compact = [
+    "CODE_GENDER",
+    "NAME_EDUCATION_TYPE",
+    "NAME_INCOME_TYPE",
+    "OCCUPATION_TYPE",
+]
+for c in categorical_cols_compact:
+    plot_default_rate(c)
 
 print("\nEDA files saved to:", OUTPUT_DIR.resolve())
