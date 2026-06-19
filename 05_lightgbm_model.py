@@ -1,18 +1,18 @@
 from pathlib import Path
+import re
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
+import seaborn as sns
 from sklearn.metrics import roc_auc_score, roc_curve
 from sklearn.model_selection import train_test_split
-import seaborn as sns
 
 sns.set_theme(style="whitegrid", context="notebook")
 plt.rcParams["figure.figsize"] = (8, 6)
 plt.rcParams["figure.dpi"] = 110
 
 try:
-    from lightgbm import LGBMClassifier
+    from lightgbm import LGBMClassifier, log_evaluation
 except ImportError as e:
     raise ImportError(
         "lightgbm is not installed. Install it with `pip install lightgbm`."
@@ -27,11 +27,39 @@ if not INPUT_FILE.exists():
     raise FileNotFoundError(f"Engineered dataset not found: {INPUT_FILE}")
 
 print("=" * 70)
-print("PHASE 1 - LIGHTGBM MODEL (ROC–AUC)")
+print("PHASE 1 - LIGHTGBM MODEL (ROC-AUC)")
 print("=" * 70)
+
+
+def clean_feature_names(columns):
+    cleaned = []
+    seen = {}
+
+    for col in columns:
+        new_col = re.sub(r"[^A-Za-z0-9_]+", "", str(col))
+        if new_col == "":
+            new_col = "feature"
+
+        if new_col in seen:
+            seen[new_col] += 1
+            new_col = f"{new_col}_{seen[new_col]}"
+        else:
+            seen[new_col] = 0
+
+        cleaned.append(new_col)
+
+    return cleaned
+
 
 # 1) Load data
 df = pd.read_csv(INPUT_FILE)
+
+# Clean feature names for LightGBM compatibility
+df.columns = clean_feature_names(df.columns)
+
+if TARGET_COL not in df.columns:
+    raise ValueError(f"Target column '{TARGET_COL}' not found after column cleaning.")
+
 y = df[TARGET_COL].values
 X = df.drop(columns=[TARGET_COL])
 
@@ -48,11 +76,11 @@ X_train, X_valid, y_train, y_valid = train_test_split(
 
 print(f"Train size: {X_train.shape[0]:,}  |  Valid size: {X_valid.shape[0]:,}")
 
-# 3) Define LightGBM model (simple, sensible defaults)
+# 3) Define LightGBM model
 lgbm = LGBMClassifier(
     n_estimators=400,
     learning_rate=0.05,
-    max_depth=-1,          # let LightGBM choose
+    max_depth=-1,
     subsample=0.8,
     colsample_bytree=0.8,
     objective="binary",
@@ -62,19 +90,21 @@ lgbm = LGBMClassifier(
 
 # 4) Train
 print("\nTraining LightGBM...")
+callbacks = [log_evaluation(period=50)]
+
 lgbm.fit(
     X_train,
     y_train,
     eval_set=[(X_train, y_train), (X_valid, y_valid)],
     eval_metric="auc",
-    verbose=50,
+    callbacks=callbacks,
 )
 
 # 5) Evaluate
 print("\nEvaluating LightGBM on validation set...")
 y_valid_prob = lgbm.predict_proba(X_valid)[:, 1]
 auc = roc_auc_score(y_valid, y_valid_prob)
-print(f"Validation ROC–AUC (LightGBM): {auc:.4f}")
+print(f"Validation ROC-AUC (LightGBM): {auc:.4f}")
 
 metrics_df = pd.DataFrame(
     {
@@ -86,7 +116,7 @@ metrics_df = pd.DataFrame(
 metrics_df.to_csv(OUTPUT_DIR / "lightgbm_metrics.csv", index=False)
 
 # 6) ROC curve plot
-fpr, tpr, thresholds = roc_curve(y_valid, y_valid_prob)
+fpr, tpr, _ = roc_curve(y_valid, y_valid_prob)
 
 plt.figure()
 plt.plot(fpr, tpr, label=f"LightGBM (AUC = {auc:.3f})")
@@ -100,15 +130,17 @@ plt.tight_layout()
 plt.savefig(OUTPUT_DIR / "lightgbm_roc_curve.png", bbox_inches="tight")
 plt.show()
 
-# 7) Feature importance (gain)
+# 7) Feature importance
 print("\nSaving feature importances...")
 importances = lgbm.feature_importances_
+
 fi_df = pd.DataFrame(
     {
         "feature": X_train.columns,
         "importance": importances,
     }
 ).sort_values("importance", ascending=False)
+
 fi_df.to_csv(OUTPUT_DIR / "lightgbm_feature_importances.csv", index=False)
 
 top_n = 20
