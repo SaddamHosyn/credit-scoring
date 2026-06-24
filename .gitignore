@@ -64,3 +64,9 @@ plots/
 submissions/
 
 Phase-2-mlops
+
+# =========================
+# MLflow local files
+# =========================
+mlflow.db
+mlruns/
