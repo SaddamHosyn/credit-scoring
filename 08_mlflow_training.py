@@ -142,6 +142,15 @@ def main():
         mlflow.log_metric("validation_auc", auc)
         mlflow.log_metric("validation_ks", ks)
 
+        # Save validation predictions for drift monitoring reference
+        validation_preds_path = OUTPUT_DIR / "validation_predictions.csv"
+        df_valid_preds = pd.DataFrame({
+            "y_true": y_valid,
+            "y_prob": y_valid_prob
+        })
+        df_valid_preds.to_csv(validation_preds_path, index=False)
+        print(f"Saved validation predictions to {validation_preds_path}")
+
         # Plot ROC curve
         fpr, tpr, _ = roc_curve(y_valid, y_valid_prob)
         plt.figure()
@@ -184,9 +193,10 @@ def main():
         plt.savefig(fi_plot_path, bbox_inches="tight")
         plt.close()
         
-        # Log Feature Importance Plot and list file to MLflow
+        # Log Feature Importance Plot, validation predictions, and list file to MLflow
         mlflow.log_artifact(str(fi_plot_path))
         mlflow.log_artifact(str(feature_list_path))
+        mlflow.log_artifact(str(validation_preds_path))
 
         # Log Model & Register in MLflow Registry
         print("\nLogging model and registering in Model Registry...")
@@ -197,8 +207,44 @@ def main():
             input_example=X_train.head(1),
         )
         
-        # Log the feature schema and version tags to model registry metadata
         print(f"Model successfully registered! URI: {model_info.model_uri}")
+
+        # Set tags on the registered model version in the MLflow Model Registry
+        try:
+            from mlflow.tracking import MlflowClient
+            client = MlflowClient()
+            model_name = "credit_scoring_lgbm"
+            
+            # Retrieve model version
+            if hasattr(model_info, "registered_model_version") and model_info.registered_model_version is not None:
+                model_version = getattr(model_info.registered_model_version, "version", model_info.registered_model_version)
+            else:
+                # Fallback: query latest versions of this model from registry
+                latest_versions = client.get_latest_versions(model_name)
+                model_version = latest_versions[0].version if latest_versions else "1"
+            
+            print(f"Applying metadata tags to Model Registry: model_name={model_name}, version={model_version}")
+            client.set_model_version_tag(
+                name=model_name,
+                version=str(model_version),
+                key="dataset_version",
+                value="v1.0"
+            )
+            client.set_model_version_tag(
+                name=model_name,
+                version=str(model_version),
+                key="feature_pipeline_version",
+                value="v1.0"
+            )
+            client.set_model_version_tag(
+                name=model_name,
+                version=str(model_version),
+                key="model_type",
+                value="lightgbm"
+            )
+            print("Successfully tagged registered model version.")
+        except Exception as e:
+            print(f"Warning: Failed to set model version tags in registry: {e}")
         
         # Save a local pickle for Hugging Face upload step
         import pickle

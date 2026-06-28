@@ -1,6 +1,7 @@
 import os
 import json
 import pickle
+from pathlib import Path
 from typing import Dict, Any, List, Union
 import pandas as pd
 from fastapi import FastAPI, HTTPException
@@ -32,10 +33,6 @@ def load_model():
     hf_token = os.environ.get("HF_TOKEN")
     
     # Local fallback paths
-    local_model_path = Path("output/model_outputs/model.pkl") if "Path" in globals() else None
-    
-    # We can import Path inside startup
-    from pathlib import Path
     local_model_path = Path("output/model_outputs/model.pkl")
     local_features_path = Path("output/model_outputs/feature_list.json")
     
@@ -140,6 +137,31 @@ def score(request: ScoreRequest):
                 "probability": float(prob),
                 "decision": decision,
             })
+            
+        # Log predictions to a file for drift monitoring
+        try:
+            prod_log_path = Path("output/production_predictions.csv")
+            prod_log_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Prepare df to append
+            log_data = []
+            import datetime
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            
+            for res in results:
+                log_data.append({
+                    "timestamp": timestamp,
+                    "SK_ID_CURR": res["SK_ID_CURR"],
+                    "probability": res["probability"],
+                    "decision": res["decision"]
+                })
+            df_log = pd.DataFrame(log_data)
+            
+            # Write header if file does not exist
+            write_header = not prod_log_path.exists()
+            df_log.to_csv(prod_log_path, mode='a', index=False, header=write_header)
+        except Exception as log_err:
+            print(f"Warning: Failed to log production predictions: {log_err}")
             
         return results[0] if is_single else results
         
