@@ -27,6 +27,16 @@ Additional relational tables are available in the dataset and can be integrated 
 
 ```text
 .
+├── .github/
+│   └── workflows/
+│       └── mlops.yml
+├── app/
+│   └── main.py
+├── src/
+│   ├── eda.py
+│   └── preprocessing.py
+├── tests/
+│   └── test_app.py
 ├── 01_eda.ipynb
 ├── 02_feature_engineering.py
 ├── 02_feature_engineering_test.py
@@ -35,23 +45,24 @@ Additional relational tables are available in the dataset and can be integrated 
 ├── 05_lightgbm_model.py
 ├── 06_kaggle_submission.py
 ├── 07_shap_analysis.py
+├── 08_mlflow_training.py
+├── 09_hf_upload.py
+├── 10_drift_monitoring.py
 ├── README.md
-├── comparison-report.txt
 ├── requirements.txt
-├── src/
-│   └── eda.py
+├── requirements_mlops.txt
 ├── home-credit-default-risk/
 │   ├── application_train.csv
 │   ├── application_test.csv
-│   ├── sample_submission.csv
 │   └── ...
 └── output/
     ├── processed_data/
     │   ├── application_train_engineered.csv
     │   └── application_test_engineered.csv
     ├── model_outputs/
-    ├── shap/
-    └── kaggle/
+    │   ├── validation_predictions.csv
+    │   └── ...
+    └── ...
 ```
 
 ## Workflow
@@ -125,6 +136,33 @@ Interpretability is addressed at two levels:
 
 This file can be uploaded directly to Kaggle for external evaluation.
 
+### 8. Phase II: Production MLOps Setup
+
+To transition this portfolio project into a production-grade system, Phase II adds a modern MLOps stack for model tracking, registry, cloud artifact storage, API serving, automated testing, and statistical drift monitoring:
+
+#### A. Model Logging & Registry (MLflow)
+- `08_mlflow_training.py` trains the LightGBM classifier and logs parameters, metrics (ROC-AUC and Kolmogorov-Smirnov statistic), validation prediction targets, and evaluation curves.
+- The model is registered in the **MLflow Model Registry** under `credit_scoring_lgbm` and programmatically tagged with its metadata (e.g. `dataset_version: v1.0`, `feature_pipeline_version: v1.0`, `model_type: lightgbm`) using `MlflowClient`.
+
+#### B. Remote Model Storage (Hugging Face)
+- Large binary files (model weights and dataset definitions) are excluded from the main repository using `.gitignore` to keep the application repo lightweight.
+- `09_hf_upload.py` uploads model pickle weights, feature list definitions, and model cards to a remote **Hugging Face Model Hub** repository.
+
+#### C. Live Inference Serving (FastAPI & Uvicorn)
+- `app/main.py` is a FastAPI serving application that exposes two endpoints:
+  - `GET /health` for checkups.
+  - `POST /score` to predict credit default risk on live applicants.
+- On startup, the application fetches the latest model files from Hugging Face (falling back to local files if offline).
+- It logs scored probabilities to `output/production_predictions.csv` for audit trails and drift tracking.
+
+#### D. Live Score Drift Monitoring (PSI / PD drift)
+- `10_drift_monitoring.py` analyzes shifts in probability of default (PD) and calculates the **Population Stability Index (PSI)** to detect population drift.
+- It compares the training baseline predictions (`validation_predictions.csv`) against logged live predictions (`production_predictions.csv`).
+- It supports customized CLI paths and gracefully falls back to mock simulation runs in clean environments (like automated CI runs).
+
+#### E. Automated Workflows (GitHub Actions)
+- `.github/workflows/mlops.yml` runs automated regression tests and checks the drift calculation script logic on every commit or PR to the main branch.
+
 ## Results
 
 ### Model comparison
@@ -176,32 +214,24 @@ The closeness between internal validation performance and Kaggle leaderboard per
 
 ## How to run
 
-Create and activate a virtual environment, then install dependencies:
-
+Create and activate a virtual environment:
 ```bash
 python -m venv .venv
 ```
 
-Windows:
-
-```bash
-.venv\Scripts\activate
+Activate the environment (Windows PowerShell):
+```powershell
+.venv/Scripts/Activate.ps1
 ```
+*(For Git Bash, use `source .venv/Scripts/activate`)*
 
-Linux / macOS:
-
-```bash
-source .venv/bin/activate
-```
-
-Install packages:
-
+Install packages for Phase I and Phase II:
 ```bash
 pip install -r requirements.txt
+pip install -r requirements_mlops.txt
 ```
 
-Run the pipeline:
-
+### Phase I Execution
 ```bash
 python src/eda.py
 python 02_feature_engineering.py
@@ -212,6 +242,34 @@ python 05_lightgbm_model.py
 python 07_shap_analysis.py
 python 06_kaggle_submission.py
 ```
+
+### Phase II Execution (MLOps)
+1. **Train and register model with MLflow:**
+   ```bash
+   python 08_mlflow_training.py
+   ```
+2. **View MLflow Tracking UI:**
+   ```bash
+   mlflow ui --backend-store-uri sqlite:///mlflow.db
+   ```
+3. **Upload model artifacts to Hugging Face (Optional):**
+   ```bash
+   export HF_REPO_ID="username/repo-name"
+   export HF_TOKEN="your-token"
+   python 09_hf_upload.py
+   ```
+4. **Serve the FastAPI model local endpoint:**
+   ```bash
+   uvicorn app.main:app --port 8000 --reload
+   ```
+5. **Run tests:**
+   ```bash
+   pytest tests/test_app.py
+   ```
+6. **Analyze probability drift:**
+   ```bash
+   python 10_drift_monitoring.py
+   ```
 
 ## Requirements
 
