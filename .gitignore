@@ -70,3 +70,9 @@ Phase-2-mlops
 # =========================
 mlflow.db
 mlruns/
+
+# =========================
+# Local Environment Secrets
+# =========================
+.env
+
