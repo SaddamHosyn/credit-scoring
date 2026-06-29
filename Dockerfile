@@ -7,9 +7,9 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Copy requirements first to leverage Docker build cache layers
-COPY requirements.txt requirements_mlops.txt ./
+COPY requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt -r requirements_mlops.txt
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy source code and app folders
 COPY app/ ./app/

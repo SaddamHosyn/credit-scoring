@@ -53,7 +53,6 @@ Additional relational tables are available in the dataset and can be integrated 
 ├── Dockerfile
 ├── README.md
 ├── requirements.txt
-├── requirements_mlops.txt
 ├── home-credit-default-risk/
 │   ├── application_train.csv
 │   ├── application_test.csv
@@ -228,10 +227,9 @@ Activate the environment (Windows PowerShell):
 ```
 *(For Git Bash, use `source .venv/Scripts/activate`)*
 
-Install packages for Phase I and Phase II:
+Install packages:
 ```bash
 pip install -r requirements.txt
-pip install -r requirements_mlops.txt
 ```
 
 ### Phase I Execution
