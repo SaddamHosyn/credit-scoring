@@ -264,7 +264,7 @@ python 06_kaggle_submission.py
    ```
 5. **Run tests:**
    ```bash
-   pytest tests/test_app.py
+   python -m pytest tests/test_app.py
    ```
 6. **Analyze probability drift:**
    ```bash

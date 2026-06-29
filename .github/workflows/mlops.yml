@@ -28,7 +28,7 @@ jobs:
 
     - name: Run unit and integration tests
       run: |
-        pytest tests/test_app.py
+        python -m pytest tests/test_app.py
 
     - name: Verify drift monitoring logic
       run: |
