@@ -86,22 +86,15 @@ This stage covers:
 
 ### 2. Feature engineering
 
-`02_feature_engineering.py` creates additional credit-risk features from the main application table.
+`scripts/02_feature_engineering_test.py` is the unified data preparation pipeline. To maximize predictive power, it aggregates and processes features across all 6 relational tables in the dataset:
 
-Main engineered variables include:
+*   **Main Application**: Extracts debt-to-income ratios, annuity-to-credit terms, employment percentages, and averages/products of external sources (`EXT_SOURCE_1`, `EXT_SOURCE_2`, `EXT_SOURCE_3`).
+*   **Bureau History**: Computes loan counts, total credit sums, active debt ratios, and status delays from `bureau.csv` and `bureau_balance.csv`.
+*   **Previous Applications**: Aggregates loan approval/rejection counts, applied vs. received amounts, and payment counts from `previous_application.csv`.
+*   **Installment Payments**: Tracks late payment delays (DPD) and installment underpayments from `installments_payments.csv`.
+*   **POS Cash & Credit Cards**: Computes cash utilization rates, credit card utilization averages, and contract status tracking.
 
-- `CREDIT_INCOME_PERCENT`
-- `ANNUITY_INCOME_PERCENT`
-- `CREDIT_TERM`
-- `DAYS_EMPLOYED_PERCENT`
-- `EXT_SOURCES_MEAN`
-- `EXT_SOURCES_MIN`
-- `EXT_SOURCES_MAX`
-- `EXT_SOURCES_PROD`
-
-The script also handles the `DAYS_EMPLOYED = 365243` anomaly and applies one-hot encoding.
-
-`02_feature_engineering_test.py` applies the same logic to `application_test.csv` and aligns test columns with the engineered training set.
+The script runs memory-efficiently by downcasting numerical types to prevent OOM issues and outputs a serving-time lookup store at `output/processed_data/secondary_features_lookup.csv`.
 
 ### 3. Baseline model
 
@@ -115,11 +108,12 @@ Because the engineered dataset still contains missing values, median imputation 
 
 The curves show that validation ROC–AUC stabilizes around 0.75 while training ROC–AUC converges slightly above it, around 0.76. The small gap suggests limited overfitting, while the relatively modest plateau indicates that the linear model is capacity-constrained for this problem.
 
-### 5. Final model: LightGBM
+### 5. Advanced Ensemble & Cross-Validation
 
-`05_lightgbm_model.py` trains a LightGBM classifier on the engineered features.
-
-This model captures non-linear relationships and feature interactions that are difficult for Logistic Regression to represent. It also provides feature importance scores that support global interpretability.
+`scripts/05_lightgbm_model.py` implements a robust ensembled validation pipeline:
+- **Stratified 5-Fold Cross-Validation** to ensure stable, non-overfitting evaluation.
+- **Model Ensembling**: Trains a combination of **LightGBM**, **XGBoost**, and **CatBoost** on each fold (15 models total).
+- Predictions are averaged across folds and models, providing a major lift in score. Model weights are serialized into `output/model_outputs/model.pkl`.
 
 ### 6. Interpretability
 
@@ -132,7 +126,7 @@ Interpretability is addressed at two levels:
 
 ### 7. Kaggle submission
 
-`06_kaggle_submission.py` trains LightGBM on the full engineered training set and produces:
+`scripts/06_kaggle_submission.py` loads the trained 15-model ensemble and aligns test features to produce the optimized out-of-fold average predictions saved at:
 
 - `output/kaggle/submission.csv`
 
@@ -154,8 +148,8 @@ To transition this portfolio project into a production-grade system, Phase II ad
 - `app/main.py` is a FastAPI serving application that exposes two endpoints:
   - `GET /health` for checkups.
   - `POST /score` to predict credit default risk on live applicants.
-- On startup, the application fetches the latest model files from Hugging Face (falling back to local files if offline).
-- It logs scored probabilities to `output/production_predictions.csv` for audit trails and drift tracking.
+- On startup, the application fetches the latest model files from Hugging Face (falling back to local files if offline) and loads the precomputed `secondary_features_lookup.csv`.
+- When scoring, it automatically merges raw payload records with precomputed history based on `SK_ID_CURR` (acting as a local feature store), and averages probabilities across the 15 ensembled models. It logs predictions using non-blocking FastAPI `BackgroundTasks`.
 
 #### D. Live Score Drift Monitoring (PSI / PD drift)
 - `10_drift_monitoring.py` analyzes shifts in probability of default (PD) and calculates the **Population Stability Index (PSI)** to detect population drift.
@@ -172,9 +166,13 @@ To transition this portfolio project into a production-grade system, Phase II ad
 | Model               | Validation ROC–AUC |
 | ------------------- | -----------------: |
 | Logistic Regression |              ~0.75 |
-| LightGBM            |             0.7682 |
+| LightGBM Baseline   |             0.7682 |
+| LightGBM (OOF)      |             0.7852 |
+| XGBoost (OOF)       |             0.7842 |
+| CatBoost (OOF)      |             0.7752 |
+| Ensemble (OOF)      |             0.7844 |
 
-The LightGBM model improves on the Logistic Regression baseline by roughly 0.02–0.03 ROC–AUC, which justifies using it as the final Phase I model.
+Integrating relational history from secondary tables combined with stratified 5-fold cross-validation and ensembling improved the model accuracy significantly by roughly 0.035 ROC–AUC over the initial linear baseline.
 
 ### Learning curve interpretation
 
