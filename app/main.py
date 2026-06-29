@@ -4,6 +4,7 @@ import pickle
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Any, List, Union
+import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel, ConfigDict
@@ -19,6 +20,7 @@ class Settings(BaseSettings):
     local_model_path: Path = Path("output/model_outputs/model.pkl")
     local_features_path: Path = Path("output/model_outputs/feature_list.json")
     production_log_path: Path = Path("output/production_predictions.csv")
+    secondary_lookup_path: Path = Path("output/processed_data/secondary_features_lookup.csv")
     log_level: str = "INFO"
 
     model_config = ConfigDict(env_file=".env", extra="ignore")
@@ -32,12 +34,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger("credit-scoring-api")
 
-# Global variables for model and features (referenced by tests)
+# Global variables for model, features, and lookup
 model = None
 expected_features = None
+secondary_lookup = None
 
 def load_model():
-    global model, expected_features
+    global model, expected_features, secondary_lookup
     
     hf_repo_id = settings.hf_repo_id
     hf_token = settings.hf_token
@@ -91,6 +94,18 @@ def load_model():
         else:
             logger.warning(f"Local files not found: {local_model_path} or {local_features_path}")
             logger.warning("Server starting without a model. Predictions will return 503.")
+
+    # Load secondary features lookup table if it exists
+    try:
+        if settings.secondary_lookup_path.exists():
+            logger.info(f"Loading secondary features lookup table from {settings.secondary_lookup_path}...")
+            secondary_lookup = pd.read_csv(settings.secondary_lookup_path)
+            secondary_lookup.set_index('SK_ID_CURR', inplace=True)
+            logger.info(f"Loaded lookup data for {len(secondary_lookup):,} clients.")
+        else:
+            logger.warning(f"Lookup file not found at {settings.secondary_lookup_path}. Requests will only use application features.")
+    except Exception as e:
+        logger.warning(f"Failed to load secondary features lookup: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -175,11 +190,27 @@ def score(request: ScoreRequest, background_tasks: BackgroundTasks):
         # Convert input to DataFrame
         raw_df = pd.DataFrame(raw_data)
         
+        # Merge with precomputed secondary features lookup on SK_ID_CURR
+        if secondary_lookup is not None and "SK_ID_CURR" in raw_df.columns:
+            raw_df = raw_df.join(secondary_lookup, on='SK_ID_CURR', how='left')
+        
         # Apply preprocessing
         processed_df = preprocess_features(raw_df, expected_features=expected_features)
         
-        # Predict probability of default (class 1)
-        probabilities = model.predict_proba(processed_df)[:, 1]
+        # Predict probability using ensemble average
+        pred_probs = []
+        if isinstance(model, dict) and ("lgbm_models" in model or "xgb_models" in model or "catboost_models" in model):
+            for lgbm in model.get("lgbm_models", []):
+                pred_probs.append(lgbm.predict_proba(processed_df)[:, 1])
+            for xgb in model.get("xgb_models", []):
+                pred_probs.append(xgb.predict_proba(processed_df)[:, 1])
+            for cat in model.get("catboost_models", []):
+                pred_probs.append(cat.predict_proba(processed_df)[:, 1])
+            
+            probabilities = np.mean(pred_probs, axis=0)
+        else:
+            # Fallback for single model predictions
+            probabilities = model.predict_proba(processed_df)[:, 1]
         
         # Format response
         results = []
