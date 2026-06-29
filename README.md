@@ -32,22 +32,25 @@ Additional relational tables are available in the dataset and can be integrated 
 │       └── mlops.yml
 ├── app/
 │   └── main.py
+├── scripts/
+│   ├── 02_feature_engineering.py
+│   ├── 02_feature_engineering_test.py
+│   ├── 03_model_training.py
+│   ├── 04_logreg_learning_curves.py
+│   ├── 05_lightgbm_model.py
+│   ├── 06_kaggle_submission.py
+│   ├── 07_shap_analysis.py
+│   ├── 08_mlflow_training.py
+│   ├── 09_hf_upload.py
+│   └── 10_drift_monitoring.py
 ├── src/
 │   ├── eda.py
 │   └── preprocessing.py
 ├── tests/
 │   └── test_app.py
+├── .gitignore
 ├── 01_eda.ipynb
-├── 02_feature_engineering.py
-├── 02_feature_engineering_test.py
-├── 03_model_training.py
-├── 04_logreg_learning_curves.py
-├── 05_lightgbm_model.py
-├── 06_kaggle_submission.py
-├── 07_shap_analysis.py
-├── 08_mlflow_training.py
-├── 09_hf_upload.py
-├── 10_drift_monitoring.py
+├── Dockerfile
 ├── README.md
 ├── requirements.txt
 ├── requirements_mlops.txt
@@ -234,19 +237,19 @@ pip install -r requirements_mlops.txt
 ### Phase I Execution
 ```bash
 python src/eda.py
-python 02_feature_engineering.py
-python 02_feature_engineering_test.py
-python 03_model_training.py
-python 04_logreg_learning_curves.py
-python 05_lightgbm_model.py
-python 07_shap_analysis.py
-python 06_kaggle_submission.py
+python scripts/02_feature_engineering.py
+python scripts/02_feature_engineering_test.py
+python scripts/03_model_training.py
+python scripts/04_logreg_learning_curves.py
+python scripts/05_lightgbm_model.py
+python scripts/07_shap_analysis.py
+python scripts/06_kaggle_submission.py
 ```
 
 ### Phase II Execution (MLOps)
 1. **Train and register model with MLflow:**
    ```bash
-   python 08_mlflow_training.py
+   python scripts/08_mlflow_training.py
    ```
 2. **View MLflow Tracking UI:**
    ```bash
@@ -256,7 +259,7 @@ python 06_kaggle_submission.py
    ```bash
    export HF_REPO_ID="username/repo-name"
    export HF_TOKEN="your-token"
-   python 09_hf_upload.py
+   python scripts/09_hf_upload.py
    ```
 4. **Serve the FastAPI model local endpoint:**
    ```bash
@@ -268,7 +271,7 @@ python 06_kaggle_submission.py
    ```
 6. **Analyze probability drift:**
    ```bash
-   python 10_drift_monitoring.py
+   python scripts/10_drift_monitoring.py
    ```
 
 ## Requirements

@@ -7,8 +7,17 @@ home-credit-default-risk/
 # =========================
 # Jupyter Notebook
 # =========================
+# =========================
+# Cache and coverage files
+# =========================
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 .ipynb_checkpoints/
 01_eda.ipynb
+
 
 # =========================
 # Python cache

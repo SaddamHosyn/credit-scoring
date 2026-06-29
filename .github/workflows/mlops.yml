@@ -32,4 +32,4 @@ jobs:
 
     - name: Verify drift monitoring logic
       run: |
-        python 10_drift_monitoring.py
+        python scripts/10_drift_monitoring.py
