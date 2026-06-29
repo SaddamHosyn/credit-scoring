@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from src.preprocessing import preprocess_features
 
 app = FastAPI(
-    title="Credit Scoring API",
+    title="Credit Scoring API...",
     description="API for predicting credit default risk using LightGBM",
     version="1.0.0",
 )
